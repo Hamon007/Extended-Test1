@@ -130,6 +130,7 @@ export function createInitialState() {
       mordecaiRiss: false,            // Riss in Mordecais Loyalität
       varkosVerteidigung: null,       // Varkos-Verteidigungsstatus
       yukiToken: false,               // Yuki-Token erhalten
+      yukiGeheilt: false,              // Yukis Drain geheilt (schaltet Ending 6 frei)
       verratPfad: null,               // Verrat-Pfad in Akt V
 
       // Akt VI Flags
@@ -403,44 +404,57 @@ function evaluateCondition(condition, state) {
 }
 
 // ─── ENDING BERECHNUNG ───────────────────────────────────────────────────────
+// Finale Ending-Matrix (GDD-konform):
+//
+// | Ending | Titel              | Wahl  | Bedingung                               |
+// |--------|--------------------|-------|-----------------------------------------|
+// |   1    | Der neue Gott      |  E    | ordnung >= chaos                        |
+// |   2    | Eminence in Shadow |  B    | schatten >= licht                       |
+// |   3    | Der wahre Held     |  A    | licht >= 38 UND ordnung > chaos         |
+// |   4    | Einsamer Wolf      | A/B/G | Fallback wenn 2 & 3 nicht erfüllt      |
+// |   5    | Void-Daemon        |  F    | schatten > licht && chaos > ordnung     |
+// |   6    | Rueckkehr          |  D    | immer (Node-requires sperrt den Button) |
+// |   7    | System Delete      |  C    | opferRichtigeAntwort (via requires)     |
+//
 export function calculateEnding(state) {
   const { alignment, flags } = state;
-  const w = flags.finaleWahl;  // "A"|"B"|"C"|"D"|"E"|"F"
+  const w = flags.finaleWahl;  // "A"|"B"|"C"|"D"|"E"|"F"|"G"
 
-  // ── WAHL-MAPPING ─────────────────────────────────────────────────────────
-  // A = Teil des Systems werden  → Ending 3 oder 4
-  // B = NULL behalten            → Ending 2 oder 1
-  // C = NULL für alle            → Ending 7
-  // D = Zurück                   → Ending 6
-  // E = Verschmelzen             → Ending 1
-  // F = Zerstören                → Ending 5
+  // Ending 1: Verschmelzung — neuer Gott (ordnung dominiert)
+  if (w === "E") {
+    return alignment.ordnung >= alignment.chaos ? "ending_1" : "ending_4";
+  }
 
-  // Ending 6: Rückkehr
-  if (w === "D") return "ending_6";
+  // Ending 5: Zerstörung — Void-Daemon
+  if (w === "F") {
+    return (alignment.schatten > alignment.licht && alignment.chaos > alignment.ordnung)
+      ? "ending_5"
+      : "ending_4"; // Sicherheitsnetz falls requires umgangen
+  }
 
-  // Ending 5: Void-Dämonenkönig (nur bei hohem Schatten)
-  if (w === "F") return "ending_5";
-
-  // Ending 7: System Delete
+  // Ending 7: System Delete (immer wählbar wenn opferRichtigeAntwort)
   if (w === "C") return "ending_7";
 
-  // Ending 1: Der neue Gott — Verschmelzung
-  if (w === "E") return "ending_1";
+  // Ending 6: Rückkehr (Node-Level via requires gesperrt)
+  if (w === "D") return "ending_6";
 
-  // Wahl B: NULL behalten → Schatten = Eminence, Licht = Einsamer Wolf
+  // Ending 2: Eminence in Shadow — NULL behalten, Schatten-Wächter
   if (w === "B") {
-    if (alignment.licht > alignment.schatten) return "ending_4";
-    return "ending_2";
+    return alignment.schatten >= alignment.licht ? "ending_2" : "ending_4";
   }
 
-  // Wahl A: Teil des Systems → Licht+Ordnung = Wahrer Held, sonst Einsamer Wolf
+  // Ending 3: Der wahre Held — licht >= 38 UND ordnung dominiert
   if (w === "A") {
-    if (alignment.licht >= 4 && alignment.ordnung >= 3) return "ending_3";
-    return "ending_4";
+    return (alignment.licht >= 38 && alignment.ordnung > alignment.chaos)
+      ? "ending_3"
+      : "ending_4";
   }
 
-  // Fallback — sollte nie erreicht werden
-  return "ending_3";
+  // Ending 4: Einsamer Wolf — Wahl G + Fallback
+  if (w === "G") return "ending_4";
+
+  // Absoluter Fallback
+  return "ending_4";
 }
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
